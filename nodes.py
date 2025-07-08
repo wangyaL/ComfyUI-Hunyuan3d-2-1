@@ -218,6 +218,11 @@ class Hy3DMultiViewsGenerator:
         seed = seed % (2**32)
         
         conf = Hunyuan3DPaintConfig(view_size, camera_config["selected_camera_azims"], camera_config["selected_camera_elevs"], camera_config["selected_view_weights"], camera_config["ortho_scale"], texture_size)
+        conf.realesrgan_ckpt_path = camera_config["realesrgan_ckpt_path"]
+        conf.multiview_cfg_path = camera_config["multiview_cfg_path"]
+        conf.custom_pipeline = camera_config["custom_pipeline"]
+        conf.dino_ckpt_path = camera_config["dino_ckpt_path"]
+        conf.multiview_pretrained_path = camera_config["multiview_pretrained_path"]
         paint_pipeline = Hunyuan3DPaintPipeline(conf)
         
         image = tensor2pil(image)
@@ -348,6 +353,11 @@ class Hy3D21CameraConfig:
                 "camera_elevations": ("STRING", {"default": "0, 0, 0, 0, 90, -90", "multiline": False}),
                 "view_weights": ("STRING", {"default": "1, 0.1, 0.5, 0.1, 0.05, 0.05", "multiline": False}),
                 "ortho_scale": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 2.0, "step": 0.01}),
+                "realesrgan_ckpt_path": ("STRING", {"default": "/inference/models/comfyui/upscale_models/RealESRGAN_x4plus.pth"}),
+                "multiview_cfg_path": ("STRING", {"default": "/workspace/maas-comfyui/custom_nodes/ComfyUI-Hunyuan3d-2-1/hy3dpaint/cfgs/hunyuan-paint-pbr.yaml"}),
+                "custom_pipeline": ("STRING", {"default": "/workspace/maas-comfyui/custom_nodes/ComfyUI-Hunyuan3d-2-1/hy3dpaint/hunyuanpaintpbr"}),
+                "dino_ckpt_path": ("STRING", {"default": "/inference/models/comfyui/diffusion_models/DINOv2/dinov2-giant/"}),
+                "multiview_pretrained_path": ("STRING", {"default": "/inference/models/comfyui/diffusion_models/Hunyuan3D-2.1"}),
             },
         }
 
@@ -356,7 +366,8 @@ class Hy3D21CameraConfig:
     FUNCTION = "process"
     CATEGORY = "Hunyuan3D21Wrapper"
 
-    def process(self, camera_azimuths, camera_elevations, view_weights, ortho_scale):
+    def process(self, camera_azimuths, camera_elevations, view_weights, ortho_scale,
+                realesrgan_ckpt_path, multiview_cfg_path, custom_pipeline, dino_ckpt_path, multiview_pretrained_path):
         angles_list = list(map(int, camera_azimuths.replace(" ", "").split(',')))
         elevations_list = list(map(int, camera_elevations.replace(" ", "").split(',')))
         weights_list = list(map(float, view_weights.replace(" ", "").split(',')))
@@ -366,6 +377,11 @@ class Hy3D21CameraConfig:
             "selected_camera_elevs": elevations_list,
             "selected_view_weights": weights_list,
             "ortho_scale": ortho_scale,
+            "realesrgan_ckpt_path": realesrgan_ckpt_path,
+            "multiview_cfg_path": multiview_cfg_path,
+            "custom_pipeline": custom_pipeline,
+            "dino_ckpt_path": dino_ckpt_path,
+            "multiview_pretrained_path": multiview_pretrained_path,
             }
         
         return (camera_config,)
