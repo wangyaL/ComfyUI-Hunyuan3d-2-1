@@ -64,7 +64,7 @@ class Hunyuan3DPaintConfig:
         self.bake_mode = "back_sample"
         self.render_size = 1024
         self.texture_size = texture_size
-        self.max_selected_view_num = 16
+        self.max_selected_view_num = 32
         self.resolution = resolution
         self.bake_exp = 4
         self.merge_method = "fast"
@@ -92,7 +92,7 @@ class Hunyuan3DPaintPipeline:
 
     def __init__(self, config=None) -> None:
         self.config = config if config is not None else Hunyuan3DPaintConfig()
-        self.models = {}
+        self.model = None
         self.stats_logs = {}
         self.render = MeshRender(
             default_resolution=self.config.render_size,
@@ -102,7 +102,7 @@ class Hunyuan3DPaintPipeline:
             ortho_scale=self.config.ortho_scale
         )
         self.view_processor = ViewProcessor(self.config, self.render)
-        self.load_models()
+        #self.load_models()
 
     def load_models(self):
         torch.cuda.empty_cache()
@@ -113,6 +113,9 @@ class Hunyuan3DPaintPipeline:
     @torch.no_grad()
     def __call__(self, mesh, image_path=None, output_mesh_path=None, use_remesh=False, save_glb=True, num_steps=10, guidance_scale=3.0, unwrap=True, seed=0):
         """Generate texture for 3D mesh using multiview diffusion"""
+        if self.model == None:
+            self.model = multiviewDiffusionNet(self.config)
+        
         # Ensure image_prompt is a list
         if isinstance(image_path, str):
             image_prompt = Image.open(image_path)
@@ -145,12 +148,16 @@ class Hunyuan3DPaintPipeline:
         self.render.load_mesh(mesh=mesh)
 
         ########### View Selection #########
-        selected_camera_elevs, selected_camera_azims, selected_view_weights = self.view_processor.bake_view_selection(
-            self.config.candidate_camera_elevs,
-            self.config.candidate_camera_azims,
-            self.config.candidate_view_weights,
-            self.config.max_selected_view_num,
-        )
+        # selected_camera_elevs, selected_camera_azims, selected_view_weights = self.view_processor.bake_view_selection(
+            # self.config.candidate_camera_elevs,
+            # self.config.candidate_camera_azims,
+            # self.config.candidate_view_weights,
+            # self.config.max_selected_view_num,
+        # )
+        
+        selected_camera_elevs = self.config.candidate_camera_elevs
+        selected_camera_azims = self.config.candidate_camera_azims
+        selected_view_weights = self.config.candidate_view_weights
 
         normal_maps = self.view_processor.render_normal_multiview(
             selected_camera_elevs, selected_camera_azims, use_abs_coor=True
@@ -173,7 +180,7 @@ class Hunyuan3DPaintPipeline:
 
         ###########  Multiview  ##########
         print('Generating MultiViews PBR ...')
-        multiviews_pbr = self.models["multiview_model"](
+        multiviews_pbr = self.model(
             image_prompt,
             normal_maps + position_maps,
             prompt=image_caption,
@@ -184,7 +191,7 @@ class Hunyuan3DPaintPipeline:
             seed=seed
         )
         
-        return multiviews_pbr["albedo"], multiviews_pbr["mr"]
+        return multiviews_pbr["albedo"], multiviews_pbr["mr"], normal_maps, position_maps
         
         ###########  Enhance  ##########
         # enhance_images = {}
@@ -247,14 +254,14 @@ class Hunyuan3DPaintPipeline:
         
         return output_glb_path
         
-    def inpaint(self, albedo, albedo_mask, mr, mr_mask):
+    def inpaint(self, albedo, albedo_mask, mr, mr_mask, vertex_inpaint, method):
         #mask_np = np.asarray(albedo)
         mask_np = (albedo_mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
-        texture = self.view_processor.texture_inpaint(albedo, mask_np)
+        texture = self.view_processor.texture_inpaint(albedo, mask_np, vertex_inpaint, method)
         
         mask_mr_np = (mr_mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
         #mask_mr_np = np.asarray(mr_mask)
-        texture_mr = self.view_processor.texture_inpaint(mr, mask_mr_np)
+        texture_mr = self.view_processor.texture_inpaint(mr, mask_mr_np, vertex_inpaint, method)
         
         return texture, texture_mr
         
@@ -273,10 +280,13 @@ class Hunyuan3DPaintPipeline:
     def clean_memory(self):
         del self.render
         del self.view_processor
-        del self.models
+        del self.model
         
         mm.soft_empty_cache()
         torch.cuda.empty_cache()
         gc.collect()    
+        
+    def load_mesh(self, mesh):
+        self.render.load_mesh(mesh=mesh)
         
         

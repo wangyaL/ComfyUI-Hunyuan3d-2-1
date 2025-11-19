@@ -10,8 +10,11 @@ transformers
 diffusers
 accelerate
 pytorch-lightning
+opencv-python
 huggingface-hub
 safetensors
 scikit-image
 pybind11
 timm
+
+meshlib
